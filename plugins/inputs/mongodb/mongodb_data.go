@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
 
 	"github.com/influxdata/telegraf"
 )
@@ -14,11 +15,18 @@ type MongodbData struct {
 	Tags          map[string]string
 	DbData        []DbData
 	ShardHostData []DbData
+        CollData []CollData
 }
 
 type DbData struct {
 	Name   string
 	Fields map[string]interface{}
+}
+
+type CollData struct {
+	DbName	string
+	Name	string
+	Fields	map[string]interface{}
 }
 
 func NewMongodbData(statLine *StatLine, tags map[string]string) *MongodbData {
@@ -27,6 +35,7 @@ func NewMongodbData(statLine *StatLine, tags map[string]string) *MongodbData {
 		Tags:     tags,
 		Fields:   make(map[string]interface{}),
 		DbData:   []DbData{},
+                CollData: []CollData{},
 	}
 }
 
@@ -120,6 +129,21 @@ var DbDataStats = map[string]string{
 	"ok":           "Ok",
 }
 
+var CollDataStats = map[string]string{
+	"count":            "Count",
+	"size":             "Size",
+	"avg_obj_size":     "AvgObjSize",
+	"storage_size":     "StorageSize",
+	"num_extents":      "NumExtents",
+	"nindexes":         "Nindexes",
+	"last_extent_size": "LastExtentSize",
+	"total_index_size": "TotalIndexSize",
+        "capped":           "Capped",
+	"max":              "Max",
+        "max_size":         "MaxSize",
+	"ok":               "Ok",
+}
+
 func (d *MongodbData) AddDbStats() {
 	for _, dbstat := range d.StatLine.DbStatsLines {
 		dbStatLine := reflect.ValueOf(&dbstat).Elem()
@@ -149,6 +173,24 @@ func (d *MongodbData) AddShardHostStats() {
 			newDbData.Fields[k] = val
 		}
 		d.ShardHostData = append(d.ShardHostData, *newDbData)
+	}
+}
+
+func (d *MongodbData) AddCollStats() {
+	for _, collstat := range d.StatLine.CollStatsLines {
+		collStatLine := reflect.ValueOf(&collstat).Elem()
+                dbCollParts := strings.Split(collstat.Name, ".")
+		newCollData := &CollData{
+			DbName: dbCollParts[0],
+			Name:	strings.Join(dbCollParts[1:], "."),
+			Fields:	make(map[string]interface{}),
+		}
+		newCollData.Fields["type"] = "coll_stat"
+		for key, value := range CollDataStats {
+			val := collStatLine.FieldByName(value).Interface()
+			newCollData.Fields[key] = val
+		}
+		d.CollData = append(d.CollData, *newCollData)
 	}
 }
 
@@ -212,5 +254,17 @@ func (d *MongodbData) flush(acc telegraf.Accumulator) {
 			d.StatLine.Time,
 		)
 		host.Fields = make(map[string]interface{})
+	}
+
+	for _, coll := range d.CollData {
+		d.Tags["db_name"] = coll.DbName
+		d.Tags["coll_name"] = coll.Name
+		acc.AddFields(
+			"mongo_coll_stats",
+			coll.Fields,
+			d.Tags,
+			d.StatLine.Time,
+		)
+		coll.Fields = make(map[string]interface{})
 	}
 }

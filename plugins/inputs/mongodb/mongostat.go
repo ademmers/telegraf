@@ -36,6 +36,7 @@ type MongoStatus struct {
 	DbStats       *DbStats
 	ShardStats    *ShardStats
 	OplogStats    *OplogStats
+        CollStats     *CollStats
 }
 
 type ServerStatus struct {
@@ -90,6 +91,35 @@ type DbStatsData struct {
 	IndexSize   int64       `bson:"indexSize"`
 	Ok          int64       `bson:"ok"`
 	GleStats    interface{} `bson:"gleStats"`
+}
+
+// CollStats stores stats from all collections
+type CollStats struct {
+	Colls []Coll
+}
+
+// Coll represents a single Collection
+type Coll struct {
+	DbName		string
+	Name		string
+	CollStatsData	*CollStatsData
+}
+
+// CollStatsData stores stats from a collection
+type CollStatsData struct {
+	Name		string		`bson:"ns"`
+	Count		int64		`bson:"count"`
+	Size		int64		`bson:"size"`
+	AvgObjSize	float64		`bson:"avgObjSize"`
+	StorageSize	int64		`bson:"storageSize"`
+	NumExtents	int64		`bson:"numExtents"`
+	Nindexes	int64		`bson:"nindexes"`
+	LastExtentSize	int64		`bson:"lastExtentSize"`
+	TotalIndexSize	int64		`bson:"totalIndexSize"`
+	Capped		bool		`bson:"capped"`
+	Max		int64		`bson:"max"`
+	MaxSize		int64		`bson:"maxSize"`
+	Ok		int64		`bson:"ok"`
 }
 
 // ClusterStatus stores information related to the whole cluster
@@ -482,6 +512,9 @@ type StatLine struct {
 	// DB stats field
 	DbStatsLines []DbStatLine
 
+	// Coll stats field
+	CollStatsLines []CollStatLine
+
 	// Shard stats
 	TotalInUse, TotalAvailable, TotalCreated, TotalRefreshing int64
 
@@ -507,6 +540,22 @@ type ShardHostStatLine struct {
 	Available  int64
 	Created    int64
 	Refreshing int64
+}
+
+type CollStatLine struct {
+	Name		string
+	Count		int64
+	Size		int64
+	AvgObjSize	float64
+	StorageSize	int64
+	NumExtents	int64
+	Nindexes	int64
+	LastExtentSize	int64
+	TotalIndexSize	int64
+	Capped		bool
+	Max		int64
+	MaxSize		int64
+	Ok		int64
 }
 
 func parseLocks(stat ServerStatus) map[string]LockUsage {
@@ -826,6 +875,30 @@ func NewStatLine(oldMongo, newMongo MongoStatus, key string, all bool, sampleSec
 			Ok:          dbStatsData.Ok,
 		}
 		returnVal.DbStatsLines = append(returnVal.DbStatsLines, *dbStatLine)
+	}
+
+	newCollStats := *newMongo.CollStats
+	for _, coll := range newCollStats.Colls {
+		collStatsData := coll.CollStatsData
+		if collStatsData.Name == "" {
+			collStatsData.Name = coll.Name
+		}
+		collStatLine := &CollStatLine{
+			Name:		collStatsData.Name,
+			Count:		collStatsData.Count,
+			Size:		collStatsData.Size,
+			AvgObjSize:	collStatsData.AvgObjSize,
+			StorageSize:	collStatsData.StorageSize,
+			NumExtents:	collStatsData.NumExtents,
+			Nindexes:	collStatsData.Nindexes,
+			LastExtentSize:	collStatsData.LastExtentSize,
+			TotalIndexSize:	collStatsData.TotalIndexSize,
+			Capped:		collStatsData.Capped,
+			Max:		collStatsData.Max,
+			MaxSize:	collStatsData.MaxSize,
+			Ok:		collStatsData.Ok,
+		}
+		returnVal.CollStatsLines = append(returnVal.CollStatsLines, *collStatLine)
 	}
 
 	// Set shard stats

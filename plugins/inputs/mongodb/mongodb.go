@@ -18,10 +18,11 @@ import (
 )
 
 type MongoDB struct {
-	Servers          []string
-	Ssl              Ssl
-	mongos           map[string]*Server
-	GatherPerdbStats bool
+	Servers			[]string
+	Ssl			Ssl
+	mongos			map[string]*Server
+	GatherPerdbStats	bool
+	GatherPercollStats	bool
 
 	// Path to CA file
 	SSLCA string `toml:"ssl_ca"`
@@ -48,6 +49,8 @@ var sampleConfig = `
 
   ## When true, collect per database stats
   # gather_perdb_stats = false
+  ## Chaning per collection stats to true only has effect when per db stats is enabled
+  gather_percoll_stats = false
 
   ## Optional SSL Config
   # ssl_ca = "/etc/telegraf/ca.pem"
@@ -173,7 +176,7 @@ func (m *MongoDB) gatherServer(server *Server, acc telegraf.Accumulator) error {
 		}
 		server.Session = sess
 	}
-	return server.gatherData(acc, m.GatherPerdbStats)
+	return server.gatherData(acc, m.GatherPerdbStats, m.GatherPercollStats)
 }
 
 func init() {

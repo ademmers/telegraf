@@ -57,7 +57,7 @@ func (s *Server) gatherOplogStats() *OplogStats {
 	return stats
 }
 
-func (s *Server) gatherData(acc telegraf.Accumulator, gatherDbStats bool) error {
+func (s *Server) gatherData(acc telegraf.Accumulator, gatherDbStats bool, gatherCollStats bool) error {
 	s.Session.SetMode(mgo.Eventual, true)
 	s.Session.SetSocketTimeout(0)
 	result_server := &ServerStatus{}
@@ -104,6 +104,7 @@ func (s *Server) gatherData(acc telegraf.Accumulator, gatherDbStats bool) error 
 	oplogStats := s.gatherOplogStats()
 
 	result_db_stats := &DbStats{}
+        result_coll_stats := &CollStats{}
 	if gatherDbStats == true {
 		names := []string{}
 		names, err = s.Session.DatabaseNames()
@@ -127,6 +128,36 @@ func (s *Server) gatherData(acc telegraf.Accumulator, gatherDbStats bool) error 
 			}
 
 			result_db_stats.Dbs = append(result_db_stats.Dbs, *db)
+
+			if gatherCollStats == true {
+				collNames := []string{}
+				collNames, err = s.Session.DB(db_name).CollectionNames()
+				if err != nil {
+					log.Println("E! Error getting collection names from " + db_name + "(" + err.Error() + ")")
+				}
+				for _, collName := range collNames {
+					if db_name == "admin" && (collName == "system.roles" || collName == "system.users" || collName == "system.version") {
+						continue
+					} 
+					collStatLine := &CollStatsData{}
+					err = s.Session.DB(db_name).Run(bson.D{
+						{
+							Name: "collStats",
+							Value: collName,
+						},
+					}, collStatLine)
+					if err != nil {
+                		                log.Println("E! Error getting coll stats from " + db_name + "." + collName + "(" + err.Error() + ")")
+		                        }
+					coll := &Coll{
+						DbName:		db_name,
+						Name:		collName,
+						CollStatsData:	collStatLine,
+					}
+
+					result_coll_stats.Colls = append(result_coll_stats.Colls, *coll)
+				}
+			}
 		}
 	}
 
@@ -135,6 +166,7 @@ func (s *Server) gatherData(acc telegraf.Accumulator, gatherDbStats bool) error 
 		ReplSetStatus: result_repl,
 		ClusterStatus: result_cluster,
 		DbStats:       result_db_stats,
+		CollStats:     result_coll_stats,
 		ShardStats:    resultShards,
 		OplogStats:    oplogStats,
 	}
@@ -157,6 +189,8 @@ func (s *Server) gatherData(acc telegraf.Accumulator, gatherDbStats bool) error 
 		data.AddDefaultStats()
 		data.AddDbStats()
 		data.AddShardHostStats()
+		data.AddCollStats()
+>>>>>>> Stashed changes
 		data.flush(acc)
 	}
 	return nil
