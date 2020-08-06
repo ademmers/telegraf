@@ -150,11 +150,16 @@ func (z *Zookeeper) gatherServer(ctx context.Context, address string, acc telegr
 		} else {
 			sValue := string(parts[2])
 
-			iVal, err := strconv.ParseInt(sValue, 10, 64)
-			if err == nil {
-				fields[measurement] = iVal
+			fVal, ferr := strconv.ParseFloat(sValue, 64)
+			if ferr == nil {
+				fields[measurement] = fVal
 			} else {
-				fields[measurement] = sValue
+				iVal, ierr := strconv.ParseInt(sValue, 10, 64)
+				if ierr == nil {
+					fields[measurement] = iVal
+				} else {
+					fields[measurement] = sValue
+				}
 			}
 		}
 	}
